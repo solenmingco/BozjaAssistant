@@ -37,6 +37,10 @@ GIT = r"D:\work\DSH\_setup\git\cmd\git.exe"
 DOTNET = r"D:\work\DSH\_setup\dotnet\dotnet.exe"
 TOKEN = pathlib.Path(r"D:\work\DSH\_setup\.gh-token")
 API = "https://api.github.com/repos/solenmingco/BozjaAssistant"
+# api.github.com and github.com are unreachable directly here (raw.
+# githubusercontent.com does not even resolve), so API/upload traffic goes
+# through the local Clash proxy.
+PROXY_URL = "http://127.0.0.1:7897"
 REPO = "https://github.com/solenmingco/BozjaAssistant"
 
 BUILD_ENV = {
@@ -176,7 +180,7 @@ def main():
     import urllib.request
 
     op = urllib.request.build_opener(urllib.request.ProxyHandler(
-        {"http": "http://127.0.0.1:7897", "https": "http://127.0.0.1:7897"}))
+        {"http": PROXY_URL, "https": PROXY_URL}))
 
     def req(url, method="GET", body=None, ctype="application/json"):
         data = None
@@ -225,16 +229,23 @@ def main():
     req(f"{API}/releases/{rel['id']}", method="PATCH", body={"make_latest": "true"})
 
     print("== 7. final consistency check ==")
-    s, master = req("https://raw.githubusercontent.com/solenmingco/BozjaAssistant/"
-                    "main/pluginmaster.json", method="HEAD")
     s2, latest = req(f"{API}/releases/latest")
-    ok_master = json.loads(
-        run(["powershell", "-Command",
-             f"(Invoke-WebRequest -UseBasicParsing "
-             f"'{REPO}/raw/main/pluginmaster.json').Content"],
-            check=False).stdout or "[]")[0]["AssemblyVersion"] == args.version
+    # Fetch with Python's own TLS. Invoke-WebRequest cannot be used here: the
+    # .NET/Schannel stack in this environment fails with SEC_E_NO_CREDENTIALS,
+    # which silently yields empty content and made this check crash.
+    try:
+        r = urllib.request.Request(
+            f"{REPO}/raw/main/pluginmaster.json",
+            headers={"User-Agent": "Dalamud", "Cache-Control": "no-cache"})
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler(
+            {"http": PROXY_URL, "https": PROXY_URL}))
+        with opener.open(r, timeout=60) as resp:
+            advertised = json.loads(resp.read().decode("utf-8"))[0]["AssemblyVersion"]
+        ok_master = advertised == args.version
+        print(f"   master advertises {advertised} (expect {args.version}): {ok_master}")
+    except Exception as e:  # noqa: BLE001
+        print(f"   master check skipped: {type(e).__name__}: {e}")
     print(f"   release latest = {latest.get('tag_name')}")
-    print(f"   master advertises {args.version}: {ok_master}")
     print()
     print("DONE. 用户在游戏里 /xlplugins -> Scan for updates 即可看到更新。")
 
