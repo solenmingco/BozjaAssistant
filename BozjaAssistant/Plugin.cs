@@ -31,6 +31,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IChatGui Chat { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IKeyState KeyState { get; private set; } = null!;
+    [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IDtrBar DtrBar { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
 
@@ -63,6 +64,9 @@ public sealed class Plugin : IDalamudPlugin
 
     /// <summary>Combat targeting.</summary>
     public CombatModule Combat { get; }
+
+    /// <summary>Mount handling for long-distance travel.</summary>
+    public MountModule Mount { get; }
 
     /// <summary>The automation state machine.</summary>
     public AutomationController Automation { get; }
@@ -97,6 +101,7 @@ public sealed class Plugin : IDalamudPlugin
             TargetManager,
             ClientState,
             Log);
+        this.Mount = new MountModule(ObjectTable, Condition, this.Activity, Log);
 
         this.Automation = new AutomationController(this);
 
@@ -132,6 +137,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         this.Automation.Dispose();
+        this.Mount.Dispose();
         this.Combat.Dispose();
         this.DropAlerts.Dispose();
         this.CombatAi.Dispose();

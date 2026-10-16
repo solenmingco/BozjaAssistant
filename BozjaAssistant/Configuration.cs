@@ -125,7 +125,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool AutoReturnAfterRevive = true;
 
     /// <summary>Automatically mount up when travelling a long distance.</summary>
-    public bool AutoMount;
+    public bool AutoMount = true;
 
     /// <summary>Distance beyond which the plugin mounts before travelling.</summary>
     public float AutoMountDistance = 60f;

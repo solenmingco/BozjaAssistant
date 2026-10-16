@@ -113,6 +113,7 @@ public sealed class AutomationController : IDisposable
         this.plugin.Navmesh.Stop();
         this.plugin.Lifestream.Abort();
         this.plugin.CombatAi.Disable(this.config.ExternalAi);
+        this.plugin.Mount.Reset();
         this.StatusText = "空闲";
         this.plugin.UpdateDtr("Bozja: 空闲");
     }
@@ -179,6 +180,7 @@ public sealed class AutomationController : IDisposable
 
         // Drop alerts run regardless of travel state: they are passive.
         this.plugin.DropAlerts.Tick();
+        this.plugin.Mount.Tick();
 
         if ((now - this.lastCombatTick).TotalSeconds >= 0.5)
         {
@@ -307,6 +309,13 @@ public sealed class AutomationController : IDisposable
         // we aim for the marker rather than an exact point.
         if (distance <= ArrivalRange)
         {
+            // Dismount on arrival: staying mounted prevents interacting with the
+            // FATE objective and can keep us out of the engagement range.
+            if (this.config.AutoMount)
+            {
+                this.plugin.Mount.Dismount();
+            }
+
             this.StatusText = $"已到达 {this.currentTarget.Name}";
             this.plugin.UpdateDtr($"Bozja: {this.currentTarget.Name}");
             return;
@@ -314,6 +323,14 @@ public sealed class AutomationController : IDisposable
 
         this.StatusText = $"前往 {this.currentTarget.Name}（{distance:F0} 米）";
         this.plugin.UpdateDtr($"Bozja: {this.StatusText}");
+
+        // Mount up for long trips. This runs before re-issuing the move order so
+        // that the summon happens while vnavmesh is still walking; if the summon
+        // interrupts pathing, the IsBusy check below re-issues it on a later tick.
+        if (this.config.AutoMount)
+        {
+            this.plugin.Mount.TryMount(distance, this.config.AutoMountDistance);
+        }
 
         // Re-issue the order if navigation has stopped without us arriving — this
         // happens when the path is invalidated by a teleport, a cutscene or combat.
