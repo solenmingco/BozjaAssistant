@@ -25,6 +25,7 @@
 主命令：/bzj 或 /bozja
   /bzj on / off / panic / ui</Description>
     <RepoUrl>https://github.com/solenmingco/BozjaAssistant</RepoUrl>
+    <IconUrl>https://cdn.jsdelivr.net/gh/solenmingco/BozjaAssistant@main/assets/icon.png</IconUrl>
     <Tags>bozja;occult-crescent;fate;automation;navigation;qol</Tags>
     <CategoryTags>utility</CategoryTags>
     <LoadSync>true</LoadSync>

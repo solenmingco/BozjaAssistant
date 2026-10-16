@@ -51,8 +51,12 @@
 2. 填入：
 
    ```
-   https://raw.githubusercontent.com/solenmingco/BozjaAssistant/main/pluginmaster.json
+   https://cdn.jsdelivr.net/gh/solenmingco/BozjaAssistant@main/pluginmaster.json
    ```
+
+   > 若你的网络可以正常访问 `raw.githubusercontent.com`，也可以改用
+   > `https://raw.githubusercontent.com/solenmingco/BozjaAssistant/main/pluginmaster.json`。
+   > jsdelivr 地址在国内可直接解析，推荐优先使用。
 
 3. 保存后回到插件列表，搜索 **Bozja** 安装即可。
 
