@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Version>0.1.0.0</Version>
+
+    <!-- Manifest fields. DalamudPackager copies these into BozjaAssistant.json inside the zip. -->
+    <Author>Estell</Author>
+    <Name>Bozja / 新月岛 助手</Name>
+    <Punchline>FATE 与紧急遭遇战自动寻路、掉落提醒、自动战斗与通用自动化。</Punchline>
+    <Description>面向国服（卫月）的 FFXIV 特殊野外内容自动化助手，同时支持「博兹雅战线 / 扎杜诺尔高原」（Bozja）
+与「新月岛」（Occult Crescent，7.2+）。功能参考 bozjalone 并为开源重写实现。
+
+模块：
+  1 FATE 模块      — 扫描当前地图 FATE，按可配置优先级（距离 / 等级 / 进度 / 剩余时间）自动寻路
+  2 紧急遭遇战 CE  — 读取 DynamicEvent 数据，监控报名/热身/战斗状态，自动前往并参战
+  3 掉落提醒       — 德米亚特玛（Demiatma）、灵魂碎片等指定物品获得时弹窗 + 音效
+  4 自动战斗       — 自动锁定最近敌人，按距离判断是否交战，可选联动 RSR / WrathCombo / BossMod
+  5 通用自动化     — 死亡自动复活、状态异常自动解除、自动上坐骑、自动返回
+  6 总控与设置     — 循环总开关、紧急暂停、模块独立开关、日志与运行统计
+
+依赖（可选，缺失时对应功能自动禁用并提示）：
+  vnavmesh    — 自动寻路
+  Lifestream  — 跨区域传送
+
+主命令：/bzj 或 /bozja
+  /bzj on / off / panic / ui</Description>
+    <RepoUrl>https://github.com/rioriopu/BozjaAssistant</RepoUrl>
+    <Tags>bozja;occult-crescent;fate;automation;navigation;qol</Tags>
+    <CategoryTags>utility</CategoryTags>
+    <LoadSync>true</LoadSync>
+    <CanUnloadAsync>true</CanUnloadAsync>
+  </PropertyGroup>
+</Project>

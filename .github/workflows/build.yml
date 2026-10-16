@@ -1,0 +1,48 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  PROJECT: BozjaAssistant/BozjaAssistant.csproj
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build
+        run: dotnet build ${{ env.PROJECT }} -c Release --nologo
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BozjaAssistant
+          path: |
+            BozjaAssistant/bin/Release/BozjaAssistant.dll
+            BozjaAssistant/bin/Release/BozjaAssistant.json
+            BozjaAssistant/bin/Release/BozjaAssistant/latest.zip
+
+      # The distribution zip must be named latest.zip at the release root, because
+      # pluginmaster.json points DownloadLinkInstall straight at
+      # releases/latest/download/latest.zip.
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: BozjaAssistant/bin/Release/BozjaAssistant/latest.zip
+          generate_release_notes: true

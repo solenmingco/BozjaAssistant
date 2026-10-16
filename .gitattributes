@@ -1,0 +1,11 @@
+# Normalize to LF in the repository so the source is identical regardless of
+# which platform checks it out; Windows tooling copes with LF fine.
+* text=auto eol=lf
+
+# Windows-only helper, keep CRLF-free too for consistency.
+*.ps1 text eol=lf
+
+# Binary assets must never be line-ending converted.
+*.png binary
+*.dll binary
+*.zip binary

@@ -1,0 +1,23 @@
+## Build output
+bin/
+obj/
+
+## IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+## Packages
+packages/
+*.nupkg
+
+## OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+## Local scratch
+*.log
