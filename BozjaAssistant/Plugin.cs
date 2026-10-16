@@ -195,15 +195,83 @@ public sealed class Plugin : IDalamudPlugin
                 Chat.Print($"[Bozja] {this.Automation.StatusText}");
                 break;
 
+            case "fates":
+            case "dump":
+                this.DumpFates();
+                break;
+
             case "":
             case "ui":
                 this.MainWindow.Toggle();
                 break;
 
             default:
-                Chat.Print($"[Bozja] 未知参数 “{args}”。可用：on / off / panic / status / reload / clear / ui");
+                Chat.Print($"[Bozja] 未知参数 “{args}”。可用：on / off / panic / status / fates / reload / clear / ui");
                 break;
         }
+    }
+
+    /// <summary>
+    /// Dump every field the FATE filter reads, plus the reasoning that decides
+    /// whether each FATE is eligible. This exists because the filter reads raw
+    /// game memory whose runtime values cannot be inferred from the struct layout:
+    /// when a FATE is silently never chosen, the only way to tell which predicate
+    /// rejected it is to print the actual numbers next to the thresholds.
+    /// </summary>
+    private void DumpFates()
+    {
+        var player = ObjectTable.LocalPlayer;
+        if (player is null)
+        {
+            Chat.Print("[Bozja] 无法读取玩家位置。");
+            return;
+        }
+
+        var position = player.Position;
+        var fates = this.Fates.Scan(position, runningOnly: false);
+
+        Chat.Print($"[Bozja] 共扫描到 {fates.Count} 个 FATE。");
+
+        foreach (var f in fates)
+        {
+            var distance = Vector3.Distance(position, f.Position);
+
+            var progressOk = this.Configuration.FateSkipProgressAbove <= 0
+                             || f.ProgressPercent < this.Configuration.FateSkipProgressAbove;
+            var timeOk = this.Configuration.FateSkipSecondsLeftBelow <= 0
+                         || f.SecondsLeft < 0
+                         || f.SecondsLeft > this.Configuration.FateSkipSecondsLeftBelow;
+            var distOk = this.Configuration.FateMaxDistance <= 0f
+                         || distance <= this.Configuration.FateMaxDistance;
+            var running = f.State == FFXIVClientStructs.FFXIV.Client.Game.Fate.FateState.Running;
+
+            Chat.Print(
+                $"[Bozja] #{f.FateId} “{f.Name}” 状态={f.State}({running switch { true => "已运行", false => "非运行" }}) " +
+                $"进度={f.ProgressPercent}% 剩余={f.SecondsLeft}s 时长={f.DurationSeconds}s " +
+                $"起点={f.StartTimeEpoch} 等级={f.Level}/{f.MaxLevel} 加成={f.IsBonus} " +
+                $"距离={distance:F0}m 半径={f.Radius:F0} 坐标=({f.Position.X:F1},{f.Position.Y:F1},{f.Position.Z:F1})");
+
+            var verdict = (running, progressOk, timeOk, distOk) switch
+            {
+                (false, _, _, _) => "未运行 -> 跳过",
+                (_, false, _, _) => $"进度 {f.ProgressPercent} 高于阈值 {this.Configuration.FateSkipProgressAbove} -> 跳过",
+                (_, _, false, _) => $"剩余时间 {f.SecondsLeft}s 低于阈值 {this.Configuration.FateSkipSecondsLeftBelow}s -> 跳过",
+                (_, _, _, false) => $"距离 {distance:F0}m 超过阈值 {this.Configuration.FateMaxDistance:F0}m -> 跳过",
+                _ => "可执行",
+            };
+
+            Chat.Print($"[Bozja]     判定：{verdict}");
+        }
+
+        if (fates.Count == 0)
+        {
+            Chat.Print("[Bozja] 注意：一个 FATE 都没读到。若此刻地图上确实有 FATE，说明 FateManager 读取失败（可能不在 FATE 区域，或结构体偏移不对）。");
+        }
+
+        Chat.Print($"[Bozja] 当前阈值：距离≤{this.Configuration.FateMaxDistance:F0}m " +
+                   $"进度<{this.Configuration.FateSkipProgressAbove}% " +
+                   $"剩余>{this.Configuration.FateSkipSecondsLeftBelow}s " +
+                   $"FATE开关={this.Configuration.FateEnabled} CE优先={this.Configuration.CeOverridesFate}");
     }
 
     public void ToggleConfigUi() => this.ConfigWindow.Toggle();
