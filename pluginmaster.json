@@ -28,6 +28,6 @@
     "DownloadLinkInstall": "https://github.com/solenmingco/BozjaAssistant/releases/latest/download/latest.zip",
     "DownloadLinkUpdate": "https://github.com/solenmingco/BozjaAssistant/releases/latest/download/latest.zip",
     "DownloadLinkTesting": "https://github.com/solenmingco/BozjaAssistant/releases/latest/download/latest.zip",
-    "IconUrl": "https://cdn.jsdelivr.net/gh/solenmingco/BozjaAssistant@main/assets/icon.png"
+    "IconUrl": "https://gh-proxy.com/https://raw.githubusercontent.com/solenmingco/BozjaAssistant/main/assets/icon.png"
   }
 ]

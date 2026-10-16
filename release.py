@@ -90,8 +90,8 @@ def bump(version: str):
     data[0]["DownloadLinkInstall"] = f"{REPO}/releases/latest/download/latest.zip"
     data[0]["DownloadLinkUpdate"] = f"{REPO}/releases/latest/download/latest.zip"
     data[0]["DownloadLinkTesting"] = f"{REPO}/releases/latest/download/latest.zip"
-    data[0]["IconUrl"] = ("https://cdn.jsdelivr.net/gh/solenmingco/"
-                          "BozjaAssistant@main/assets/icon.png")
+    data[0]["IconUrl"] = ("https://gh-proxy.com/https://raw.githubusercontent.com/"
+                          "solenmingco/BozjaAssistant/main/assets/icon.png")
     MASTER.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
                       encoding="utf-8")
     print(f"   pluginmaster.json AssemblyVersion -> {version}")

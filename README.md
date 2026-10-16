@@ -51,12 +51,15 @@
 2. 填入：
 
    ```
-   https://cdn.jsdelivr.net/gh/solenmingco/BozjaAssistant@main/pluginmaster.json
+   https://gh-proxy.com/https://raw.githubusercontent.com/solenmingco/BozjaAssistant/main/pluginmaster.json
    ```
 
-   > 若你的网络可以正常访问 `raw.githubusercontent.com`，也可以改用
-   > `https://raw.githubusercontent.com/solenmingco/BozjaAssistant/main/pluginmaster.json`。
-   > jsdelivr 地址在国内可直接解析，推荐优先使用。
+   > **为什么不用其它地址**
+   >
+   > - `raw.githubusercontent.com` —— 国内多数网络无法解析该域名，列表直接拉不到。
+   > - `cdn.jsdelivr.net/...@main/...` —— 能拉到列表，但 jsdelivr 对**分支引用**缓存
+   >   长达 7 天，会导致「新版本已发布但游戏一直显示无需更新」。**不要用这个。**
+   > - `gh-proxy.com` 只缓存 60 秒，实测 0.6s 响应，发布后一分钟内即可检测到更新。
 
 3. 保存后回到插件列表，搜索 **Bozja** 安装即可。
 
