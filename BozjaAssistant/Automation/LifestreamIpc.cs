@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Plugin.Services;
@@ -29,6 +29,7 @@ public sealed class LifestreamIpc : IDisposable
     private readonly ICallGateSubscriber<bool> isBusy;
     private readonly ICallGateSubscriber<object?> abort;
     private readonly ICallGateSubscriber<string, bool> aethernetTeleport;
+    private readonly ICallGateSubscriber<uint, bool> aethernetTeleportByPlaceNameId;
     private readonly ICallGateSubscriber<uint, byte, bool> teleport;
 
     public LifestreamIpc(IDalamudPluginInterface pluginInterface, IPluginLog log)
@@ -39,6 +40,7 @@ public sealed class LifestreamIpc : IDisposable
         this.isBusy = pluginInterface.GetIpcSubscriber<bool>(Prefix + "IsBusy");
         this.abort = pluginInterface.GetIpcSubscriber<object?>(Prefix + "Abort");
         this.aethernetTeleport = pluginInterface.GetIpcSubscriber<string, bool>(Prefix + "AethernetTeleport");
+        this.aethernetTeleportByPlaceNameId = pluginInterface.GetIpcSubscriber<uint, bool>(Prefix + "AethernetTeleportByPlaceNameId");
         this.teleport = pluginInterface.GetIpcSubscriber<uint, byte, bool>(Prefix + "Teleport");
     }
 
@@ -119,6 +121,31 @@ public sealed class LifestreamIpc : IDisposable
         catch (Exception ex)
         {
             this.log.Warning(ex, "调用 Lifestream 以太之光传送失败");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Aethernet hop by PlaceName sheet row id.
+    ///
+    /// Preferred over the name overload: the id is language-independent, so the
+    /// warp keeps working on a client whose shard names differ from the ones the
+    /// plugin was written against.
+    /// </summary>
+    public bool AethernetTeleportByPlaceNameId(uint placeNameRowId)
+    {
+        if (this.aethernetTeleportByPlaceNameId is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return this.aethernetTeleportByPlaceNameId.InvokeFunc(placeNameRowId);
+        }
+        catch (Exception ex)
+        {
+            this.log.Warning(ex, "调用 Lifestream 以太之光传送（PlaceName）失败");
             return false;
         }
     }

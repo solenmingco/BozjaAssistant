@@ -50,6 +50,9 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Snapshotter for the Critical Engagement table.</summary>
     public CriticalEngagementScanner Engagements { get; }
 
+    /// <summary>Aethernet shard discovery and cross-layer routing.</summary>
+    public AethernetScanner Aethernet { get; }
+
     /// <summary>vnavmesh IPC, for walking.</summary>
     public NavmeshIpc Navmesh { get; }
 
@@ -83,6 +86,7 @@ public sealed class Plugin : IDalamudPlugin
         this.Catalog = new GameDataCatalog(DataManager, Log);
         this.Fates = new FateScanner(Log);
         this.Engagements = new CriticalEngagementScanner(Log);
+        this.Aethernet = new AethernetScanner(ObjectTable, DataManager, Log);
         this.Navmesh = new NavmeshIpc(PluginInterface, Log);
         this.Lifestream = new LifestreamIpc(PluginInterface, Log);
         this.CombatAi = new CombatAiIpc(PluginInterface, Log);
@@ -200,15 +204,80 @@ public sealed class Plugin : IDalamudPlugin
                 this.DumpFates();
                 break;
 
+            case "aether":
+            case "aethernet":
+                this.DumpAethernet();
+                break;
+
             case "":
             case "ui":
                 this.MainWindow.Toggle();
                 break;
 
             default:
-                Chat.Print($"[Bozja] 未知参数 “{args}”。可用：on / off / panic / status / fates / reload / clear / ui");
+                Chat.Print($"[Bozja] 未知参数 “{args}”。可用：on / off / panic / status / fates / aether / reload / clear / ui");
                 break;
         }
+    }
+
+    /// <summary>
+    /// Print the shard list with the layer each one was assigned, plus the plan
+    /// for the current target.
+    ///
+    /// Layer assignment is inferred from shard heights, so when a cross-layer move
+    /// misbehaves the first thing to check is whether the grouping matches what the
+    /// player sees. This dumps exactly that, rather than making the user guess.
+    /// </summary>
+    private void DumpAethernet()
+    {
+        var player = ObjectTable.LocalPlayer;
+        if (player is null)
+        {
+            Chat.Print("[Bozja] 尚未进入游戏。");
+            return;
+        }
+
+        var shards = this.Aethernet.Scan(player.Position);
+        Chat.Print($"[Bozja] 以太水晶 {shards.Count} 个（世界坐标 Y 用于分层）。");
+
+        foreach (var shard in shards)
+        {
+            Chat.Print(
+                $"  [{AethernetScanner.LayerName(shard.Layer)}] {shard.Name} " +
+                $"PlaceNameId={shard.PlaceNameId} " +
+                $"pos=({shard.Position.X:F0}, {shard.Position.Y:F0}, {shard.Position.Z:F0}) " +
+                $"距 {shard.DistanceTo(player.Position):F0} 米");
+        }
+
+        if (shards.Count == 0)
+        {
+            Chat.Print("[Bozja] 没有找到水晶。可能不在新月岛，或尚未与任何水晶共鸣。");
+            return;
+        }
+
+        var plan = this.Aethernet.PlanRoute(shards, player.Position, this.Automation.CurrentTargetPosition);
+        if (plan is null)
+        {
+            Chat.Print("[Bozja] 无法规划路线（水晶列表为空）。");
+            return;
+        }
+
+        Chat.Print(
+            $"[Bozja] 玩家在{AethernetScanner.LayerName(plan.PlayerLayer)}，" +
+            $"目标在{AethernetScanner.LayerName(plan.TargetLayer)}，" +
+            (plan.NeedsTransition ? "需要跨层传送。" : "同层，直接走过去。"));
+
+        if (plan.NearestShard is not null)
+        {
+            Chat.Print($"  最近的本层水晶：{plan.NearestShard.Name}");
+        }
+
+        if (plan.TargetLayerShard is not null)
+        {
+            Chat.Print($"  目标层落点水晶：{plan.TargetLayerShard.Name} (PlaceNameId={plan.TargetLayerShard.PlaceNameId})");
+        }
+
+        Chat.Print($"[Bozja] 传送开关：{(this.Configuration.AethernetRouting ? "开" : "关")}；Lifestream：{(this.Lifestream.IsAvailable ? "可用" : "不可用")}");
     }
 
     /// <summary>

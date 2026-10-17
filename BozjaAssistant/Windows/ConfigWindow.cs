@@ -204,6 +204,23 @@ public sealed class ConfigWindow : Window, IDisposable
             ImGui.SetNextItemWidth(200);
             this.SaveOnChange(() => ImGui.SliderFloat("上坐骑距离阈值（米）", ref this.config.AutoMountDistance, 10f, 300f));
         }
+
+        ImGui.Spacing();
+        this.SaveOnChange(() => ImGui.Checkbox("使用以太水晶（以太之光）跨层移动", ref this.config.AethernetRouting));
+
+        if (this.config.AethernetRouting)
+        {
+            ImGui.TextColored(
+                ImGuiColors.DalamudGrey,
+                "新月岛的上/中/下层互不相通，只能靠内部以太水晶传送。");
+            ImGui.TextColored(
+                ImGuiColors.DalamudGrey,
+                "开启后，目标在别层时会先走到本层水晶再传送（需要 Lifestream）。");
+        }
+        else
+        {
+            ImGui.TextColored(ImGuiColors.DalamudRed, "已关闭：别层的目标将无法到达。");
+        }
     }
 
     private void DrawMiscSection()

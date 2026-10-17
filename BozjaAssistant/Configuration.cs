@@ -130,6 +130,16 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Distance beyond which the plugin mounts before travelling.</summary>
     public float AutoMountDistance = 60f;
 
+    /// <summary>
+    /// Use the internal Aethernet shards to cross layers of the Occult Crescent
+    /// (新月岛), whose three stacked layers have no ground connection. Without
+    /// this, targets on another layer are simply unreachable by walking.
+    /// </summary>
+    public bool AethernetRouting = true;
+
+    /// <summary>Seconds to wait for the warp to complete before giving up.</summary>
+    public int AethernetWarpTimeoutSeconds = 20;
+
     // ---------------------------------------------------------------- 统计
     public int TotalFatesCompleted;
     public int TotalCesJoined;

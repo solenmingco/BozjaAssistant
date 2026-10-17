@@ -42,6 +42,12 @@ public sealed class AutomationController : IDisposable
     private bool wasDead;
     private bool disposed;
 
+    /// <summary>
+    /// Set once we have warped for the current target. Stops us from warping
+    /// repeatedly when the shard we landed on is still the nearest one.
+    /// </summary>
+    private bool warpedForCurrentTarget;
+
     /// <summary>Player position in world coordinates.</summary>
     private Vector3 PlayerPosition
     {
@@ -292,6 +298,9 @@ public sealed class AutomationController : IDisposable
             return;
         }
 
+        // A new target invalidates any previous warp bookkeeping.
+        this.warpedForCurrentTarget = false;
+
         this.activity.Add($"前往 {target.Name}：{target.Reason}");
         this.log.Information("新目标 {Kind} {Name}，{Reason}", target.Kind, target.Name, target.Reason);
 
@@ -300,9 +309,20 @@ public sealed class AutomationController : IDisposable
         this.IssueMove(target);
     }
 
-    /// <summary>Keep the character moving toward the current target.</summary>
+    /// <summary>
+    /// Keep the character moving toward the current target.
+    /// </summary>
     private void ContinueTravel(Vector3 playerPosition)
     {
+        // Cross-layer handling comes first. The Occult Crescent layers are three
+        // unconnected islands, so a plain path request for a target on another
+        // layer either fails outright or silently walks to the edge of this
+        // island and parks there. Warping has to be decided before pathing.
+        if (this.config.AethernetRouting && this.TryHandleCrossLayer(playerPosition))
+        {
+            return;
+        }
+
         var distance = Vector3.Distance(playerPosition, this.currentTarget.Position);
 
         // Close enough for FATE/CE participation. Both are areas with a radius, so
@@ -352,8 +372,115 @@ public sealed class AutomationController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Handle the case where the target sits on a different layer of the Occult
+    /// Crescent than the player.
+    ///
+    /// Returns <c>true</c> when this method owns the movement for this tick, so
+    /// the caller must not also issue a path. Returning <c>false</c> means the
+    /// target is reachable by walking and normal pathing should continue.
+    ///
+    /// The flow is: walk to a shard on the current layer, then open the network
+    /// to a shard on the target layer. Lifestream performs the warp itself, which
+    /// matters because it already knows how to drive the shard's menu; doing that
+    /// by hand here would break on every client language.
+    /// </summary>
+    private bool TryHandleCrossLayer(Vector3 playerPosition)
+    {
+        var shards = this.plugin.Aethernet.Scan(playerPosition);
+        if (shards.Count == 0)
+        {
+            return false;
+        }
+
+        var plan = this.plugin.Aethernet.PlanRoute(shards, playerPosition, this.currentTarget.Position);
+        if (plan is null || !plan.NeedsTransition)
+        {
+            return false;
+        }
+
+        if (this.warpedForCurrentTarget)
+        {
+            // Already warped for this target. Let normal pathing take over so we
+            // do not ping-pong between shards when the arrival shard happens to
+            // be the nearest one on the new layer.
+            return false;
+        }
+
+        var targetShard = plan.TargetLayerShard!;
+        var sourceShard = plan.NearestShard;
+
+        if (sourceShard is null)
+        {
+            this.StatusText = "找不到可用的以太水晶";
+            return true;
+        }
+
+        var distanceToShard = sourceShard.DistanceTo(playerPosition);
+        if (distanceToShard > AethernetScanner.ShardInteractRange)
+        {
+            // Walk to the shard on our own layer. Mounting is worth it here: the
+            // shards of one layer are spread across a large island.
+            this.StatusText =
+                $"跨层前往 {this.currentTarget.Name}：先去{AethernetScanner.LayerName(plan.PlayerLayer)}水晶 {sourceShard.Name}";
+            this.plugin.UpdateDtr($"Bozja: 前往水晶 {sourceShard.Name}");
+
+            if (this.config.AutoMount)
+            {
+                this.plugin.Mount.TryMount(distanceToShard, this.config.AutoMountDistance);
+            }
+
+            if (!this.plugin.Navmesh.IsBusy)
+            {
+                this.plugin.Navmesh.MoveCloseTo(sourceShard.Position, AethernetScanner.ShardInteractRange - 1f);
+            }
+
+            return true;
+        }
+
+        // In range of the shard: ask Lifestream to warp. Try the structured route
+        // first (language-independent) and fall back to the display name.
+        this.plugin.Mount.Dismount();
+        this.plugin.Navmesh.Stop();
+
+        var requested = this.plugin.Lifestream.AethernetTeleportByPlaceNameId(targetShard.PlaceNameId)
+                        || this.plugin.Lifestream.AethernetTeleport(targetShard.Name);
+
+        if (!requested)
+        {
+            // Lifestream refused (busy, or it does not recognise the destination).
+            // Do not spin: stop trying for this target and let the normal path
+            // attempt happen, then the rescan will pick something else.
+            this.warpedForCurrentTarget = true;
+            this.activity.Warning($"以太之光传送被拒绝：{targetShard.Name}");
+            this.log.Warning("Aethernet teleport refused for {Shard}", targetShard.Name);
+            return false;
+        }
+
+        this.warpedForCurrentTarget = true;
+        this.activity.Success(
+            $"以太之光：{AethernetScanner.LayerName(plan.PlayerLayer)} {sourceShard.Name} → " +
+            $"{AethernetScanner.LayerName(plan.TargetLayer)} {targetShard.Name}");
+        this.log.Information(
+            "Aethernet warp {From} -> {To} (layer {FromLayer} -> {ToLayer})",
+            sourceShard.Name, targetShard.Name, plan.PlayerLayer, plan.TargetLayer);
+
+        this.StatusText = $"已传送到{AethernetScanner.LayerName(plan.TargetLayer)}";
+        return true;
+    }
+
     /// <summary>How close to a FATE/CE marker counts as arrived, in yalms.</summary>
     private const float ArrivalRange = 8f;
+
+    /// <summary>
+    /// Position of the target currently being travelled to, or the player's own
+    /// position when there is no target. Exposed so the diagnostic command can
+    /// report which layer a decision was made against.
+    /// </summary>
+    public Vector3 CurrentTargetPosition =>
+        this.currentTarget.Kind == TargetSelector.TargetKind.None
+            ? Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero
+            : this.currentTarget.Position;
 
     public void Dispose()
     {
