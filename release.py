@@ -233,18 +233,39 @@ def main():
     # Fetch with Python's own TLS. Invoke-WebRequest cannot be used here: the
     # .NET/Schannel stack in this environment fails with SEC_E_NO_CREDENTIALS,
     # which silently yields empty content and made this check crash.
-    try:
-        r = urllib.request.Request(
-            f"{REPO}/raw/main/pluginmaster.json",
-            headers={"User-Agent": "Dalamud", "Cache-Control": "no-cache"})
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler(
-            {"http": PROXY_URL, "https": PROXY_URL}))
-        with opener.open(r, timeout=60) as resp:
-            advertised = json.loads(resp.read().decode("utf-8"))[0]["AssemblyVersion"]
-        ok_master = advertised == args.version
-        print(f"   master advertises {advertised} (expect {args.version}): {ok_master}")
-    except Exception as e:  # noqa: BLE001
-        print(f"   master check skipped: {type(e).__name__}: {e}")
+    #
+    # This check must go through a mirror that does NOT cache, otherwise it
+    # reports the previous release as a failure. gh-proxy.com was measured
+    # serving a stale copy well past its advertised max-age=60, so the check
+    # uses ghfast.top and falls back to fetching straight from GitHub.
+    master_urls = [
+        "https://ghfast.top/https://raw.githubusercontent.com/"
+        "solenmingco/BozjaAssistant/main/pluginmaster.json",
+        "https://raw.githubusercontent.com/"
+        "solenmingco/BozjaAssistant/main/pluginmaster.json",
+    ]
+    advertised = None
+    for url in master_urls:
+        try:
+            r = urllib.request.Request(
+                url, headers={"User-Agent": "Dalamud", "Cache-Control": "no-cache"})
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler(
+                {"http": PROXY_URL, "https": PROXY_URL}))
+            with opener.open(r, timeout=60) as resp:
+                advertised = json.loads(resp.read().decode("utf-8"))[0]["AssemblyVersion"]
+            print(f"   master advertises {advertised} via {url.split('/')[2]}")
+            break
+        except Exception as e:  # noqa: BLE001
+            print(f"   {url.split('/')[2]} check failed: {type(e).__name__}: {e}")
+
+    if advertised is None:
+        print("   !! could not read pluginmaster.json from any mirror")
+    elif advertised != args.version:
+        print(f"   !! master advertises {advertised}, expected {args.version}")
+        raise SystemExit("pluginmaster.json on main does not advertise the new version")
+    else:
+        print(f"   versions agree: {advertised}")
+
     print(f"   release latest = {latest.get('tag_name')}")
     print()
     print("DONE. 用户在游戏里 /xlplugins -> Scan for updates 即可看到更新。")
