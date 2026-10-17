@@ -53,6 +53,7 @@ public static class TargetSelector
             .Where(ce => (config.CeJoinOnRegister && ce.IsRegistering)
                          || (config.CeJoinOnWarmup && ce.State == DynamicEventState.Warmup))
             .Where(ce => !IsBlacklisted(ce, config))
+            .Where(ce => IsAllowed(ce.Name, config.CeAllowList))
             .Select(ce => (ce, distance: Vector3.Distance(playerPosition, ce.Position)))
             .Where(x => config.CeMaxDistance <= 0f || x.distance <= config.CeMaxDistance)
             .OrderBy(x => x.distance)
@@ -99,6 +100,7 @@ public static class TargetSelector
 
         var candidates = fates
             .Where(f => f.State == FFXIVClientStructs.FFXIV.Client.Game.Fate.FateState.Running)
+            .Where(f => IsAllowed(f.Name, config.FateAllowList))
             .Select(f => (fate: f, distance: Vector3.Distance(playerPosition, f.Position)))
             .Where(x => config.FateMaxDistance <= 0f || x.distance <= config.FateMaxDistance)
             .Where(x => config.FateSkipProgressAbove <= 0 || x.fate.ProgressPercent < config.FateSkipProgressAbove)
@@ -157,6 +159,33 @@ public static class TargetSelector
             }
 
             if (ce.Name.Contains(entry, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 白名单判定。空列表表示「全部允许」，这是默认行为：
+    /// 绝大多数玩家不会去维护白名单，把空表解释成「全部禁止」会让人以为插件坏了。
+    /// </summary>
+    private static bool IsAllowed(string name, IReadOnlyList<string> allowList)
+    {
+        if (allowList.Count == 0)
+        {
+            return true;
+        }
+
+        foreach (var entry in allowList)
+        {
+            if (string.IsNullOrWhiteSpace(entry))
+            {
+                continue;
+            }
+
+            if (name.Contains(entry, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

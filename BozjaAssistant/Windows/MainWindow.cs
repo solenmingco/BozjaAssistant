@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
+using BozjaAssistant.Automation;
 using BozjaAssistant.Data;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
@@ -52,9 +55,135 @@ public sealed class MainWindow : Window, IDisposable
             }
 
             this.DrawTab("总览", FontAwesomeIcon.Gauge, this.DrawOverviewTab);
+            this.DrawTab("采集", FontAwesomeIcon.BoxOpen, this.DrawHuntTab);
+            this.DrawTab("幻影职业", FontAwesomeIcon.Magic, this.DrawBuffTab);
+            this.DrawTab("陷阱", FontAwesomeIcon.ExclamationTriangle, this.DrawTrapTab);
             this.DrawTab("掉落提醒", FontAwesomeIcon.Bell, this.DrawDropTab);
             this.DrawTab("日志", FontAwesomeIcon.List, this.DrawLogTab);
             this.DrawTab("关于", FontAwesomeIcon.InfoCircle, this.DrawAboutTab);
+        }
+    }
+
+    /// <summary>采集进度与候选点概况。</summary>
+    private void DrawHuntTab()
+    {
+        var store = HuntDataStore.Instance;
+
+        ImGui.TextColored(ImGuiColors.DalamudGrey, "数据：");
+        ImGui.SameLine();
+        ImGui.TextUnformatted(store.IsLoaded ? HuntDataStore.Describe() : $"载入失败 — {store.LoadError}");
+
+        ImGui.Spacing();
+        ImGui.TextColored(ImGuiColors.DalamudGrey, "巡逻进度：");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"{this.plugin.Hunt.VisitedCount} 个候选点已巡查");
+
+        if (ImGui.Button("重置巡逻进度"))
+        {
+            this.plugin.Hunt.ResetPatrol();
+        }
+
+        ImGui.SameLine();
+        ImGui.TextDisabled("(对象表里没有目标时，会按候选点顺序走过去看)");
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("新月岛内部以太之光");
+
+        if (ImGui.BeginTable("##aether", 3, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH))
+        {
+            ImGui.TableSetupColumn("名称");
+            ImGui.TableSetupColumn("PlaceNameId");
+            ImGui.TableSetupColumn("坐标");
+            ImGui.TableHeadersRow();
+
+            foreach (var ae in store.Aetherytes)
+            {
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(ae.Name);
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(ae.PlaceNameId.ToString());
+                ImGui.TableNextColumn();
+                ImGui.TextDisabled($"{ae.Position.X:F0}, {ae.Position.Y:F0}, {ae.Position.Z:F0}");
+            }
+
+            ImGui.EndTable();
+        }
+    }
+
+    /// <summary>幻影职业增益状态。</summary>
+    private void DrawBuffTab()
+    {
+        var currentJob = BuffModule.GetCurrentJob();
+        ImGui.TextColored(ImGuiColors.DalamudGrey, "当前幻影职业：");
+        ImGui.SameLine();
+        ImGui.TextUnformatted(currentJob == 0 ? "（不在新月岛 / 无幻影职业）" : $"#{currentJob}");
+
+        ImGui.TextColored(ImGuiColors.DalamudGrey, "动作阶段：");
+        ImGui.SameLine();
+        ImGui.TextUnformatted(this.plugin.Buff.PhaseText);
+
+        ImGui.Separator();
+
+        var player = Plugin.ObjectTable.LocalPlayer;
+        var statuses = new List<(uint, float)>();
+        if (player is Dalamud.Game.ClientState.Objects.Types.IBattleChara bc)
+        {
+            foreach (var s in bc.StatusList)
+            {
+                statuses.Add((s.StatusId, s.RemainingTime));
+            }
+        }
+
+        foreach (var spec in BuffModule.AllSpecs)
+        {
+            var hit = statuses.FirstOrDefault(s => s.Item1 == spec.StatusId);
+            var text = hit.Item1 == 0 ? "未激活" : $"剩余 {hit.Item2:F0} 秒";
+            ImGui.BulletText($"{spec.Name}  —  {text}");
+        }
+
+        ImGui.Spacing();
+        ImGui.TextDisabled("在新月岛内且持有对应幻影职业时，才会切过去放增益再切回。");
+    }
+
+    /// <summary>两歧塔陷阱标记列表。</summary>
+    private void DrawTrapTab()
+    {
+        var markers = this.plugin.ForkedTower.Markers;
+
+        ImGui.TextColored(ImGuiColors.DalamudGrey, "已检测陷阱：");
+        ImGui.SameLine();
+        ImGui.TextUnformatted(markers.Count.ToString());
+
+        ImGui.TextDisabled("陷阱坐标是运行时扫描得到的，不是服务器共享数据。");
+
+        ImGui.Separator();
+
+        if (markers.Count == 0)
+        {
+            ImGui.TextDisabled("当前没有检测到陷阱。");
+            return;
+        }
+
+        if (ImGui.BeginTable("##traps", 3, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH))
+        {
+            ImGui.TableSetupColumn("名称");
+            ImGui.TableSetupColumn("坐标");
+            ImGui.TableSetupColumn("检测时间");
+            ImGui.TableHeadersRow();
+
+            foreach (var m in markers)
+            {
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(m.Name);
+                ImGui.TableNextColumn();
+                ImGui.TextDisabled($"{m.Position.X:F0}, {m.Position.Y:F0}, {m.Position.Z:F0}");
+                ImGui.TableNextColumn();
+                ImGui.TextDisabled(m.DetectedAtUtc.ToLocalTime().ToString("HH:mm:ss"));
+            }
+
+            ImGui.EndTable();
         }
     }
 

@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.1.4.2</Version>
+    <Version>0.2.0.0</Version>
 
     <!-- Manifest fields. DalamudPackager copies these into BozjaAssistant.json inside the zip. -->
     <Author>Estell</Author>
@@ -15,8 +15,13 @@
   2 紧急遭遇战 CE  — 读取 DynamicEvent 数据，监控报名/热身/战斗状态，自动前往并参战
   3 掉落提醒       — 德米亚特玛（Demiatma）、灵魂碎片等指定物品获得时弹窗 + 音效
   4 自动战斗       — 自动锁定最近敌人，按距离判断是否交战，可选联动 RSR / WrathCombo / BossMod
-  5 通用自动化     — 死亡自动复活、状态异常自动解除、长距离移动自动上坐骑（到达后自动下坐骑）、自动返回
-  6 总控与设置     — 循环总开关、紧急暂停、模块独立开关、日志与运行统计
+  5 通用自动化     — 死亡自动复活、状态异常自动解除、长距离移动自动上坐骑、自动返回
+  6 宝箱与胡萝卜   — 扫描相邻区域容器与可交互物，按预计算路径前往（新月岛）
+  7 刷怪           — 拉怪聚怪、战斗之铃范围击杀（新月岛）
+  8 幻影职业 Buff  — 自动切换幻影职业施放增益后切回
+  9 两层塔         — 两歧塔陷阱位置绘制与提醒
+ 10 统计           — 每小时经验与货币收益、返回营地、窗口管理
+ 11 总控与设置     — 循环总开关、紧急暂停、模块独立开关、日志与运行统计
 
 依赖（可选，缺失时对应功能自动禁用并提示）：
   vnavmesh    — 自动寻路
@@ -31,4 +36,9 @@
     <LoadSync>true</LoadSync>
     <CanUnloadAsync>true</CanUnloadAsync>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 宝箱 / 胡萝卜候选点。嵌入为资源，随 dll 一起分发，不额外下载。 -->
+    <EmbeddedResource Include="Data\HuntData.json" LogicalName="BozjaAssistant.Data.HuntData.json" />
+  </ItemGroup>
 </Project>

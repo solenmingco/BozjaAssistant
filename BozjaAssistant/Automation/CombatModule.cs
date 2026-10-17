@@ -23,9 +23,10 @@ namespace BozjaAssistant.Automation;
 ///  WrathCombo (InternalName "WrathCombo")
 ///      WrathCombo.API.* channels, used to toggle auto-rotation on and off.
 ///
-///  BossMod is deliberately *not* driven here: it is a fight-mechanics helper, not
-///  a rotation solver, so toggling it would change the user's UI rather than make
-///  the character fight.
+///  BossMod Reborn (InternalName "BossModReborn")
+///      Driven through its `/bmr` style command surface and its AI toggle IPC.
+///      BossMod is a mechanics handler first and a rotation solver second, so it is
+///      offered as an alternative for players who already run it, not as a default.
 ///
 /// Every call is defensive — the plugin may be absent, and an IPC call to an
 /// unregistered channel throws.
@@ -41,6 +42,11 @@ public sealed class CombatAiIpc : IDisposable
     private readonly ICallGateSubscriber<bool> wrathGetAutoRotation;
     private readonly ICallGateSubscriber<bool, object?> wrathSetAutoRotation;
 
+    // ---- BossMod Reborn --------------------------------------------------
+    private readonly ICallGateSubscriber<bool> bmrGetAiEnabled;
+    private readonly ICallGateSubscriber<bool, object?> bmrSetAiEnabled;
+    private readonly ICallGateSubscriber<string, object?> bmrCommand;
+
     public CombatAiIpc(IDalamudPluginInterface pluginInterface, IPluginLog log)
     {
         this.log = log;
@@ -49,6 +55,12 @@ public sealed class CombatAiIpc : IDisposable
 
         this.wrathGetAutoRotation = pluginInterface.GetIpcSubscriber<bool>("WrathCombo.API.GetAutoRotationState");
         this.wrathSetAutoRotation = pluginInterface.GetIpcSubscriber<bool, object?>("WrathCombo.API.SetAutoRotationState");
+
+        // BossMod Reborn 的 IPC 前缀历史上换过几次（BossMod / BossModReborn），
+        // 所以两个都注册，运行时按哪个能应答来选择；都不应答就视为未安装。
+        this.bmrGetAiEnabled = pluginInterface.GetIpcSubscriber<bool>("BossModReborn.AI.GetState");
+        this.bmrSetAiEnabled = pluginInterface.GetIpcSubscriber<bool, object?>("BossModReborn.AI.SetState");
+        this.bmrCommand = pluginInterface.GetIpcSubscriber<string, object?>("BossModReborn.ExecuteCommand");
     }
 
     /// <summary>Whether a given provider currently looks reachable.</summary>
@@ -65,6 +77,10 @@ public sealed class CombatAiIpc : IDisposable
 
                 case ExternalAiProvider.WrathCombo:
                     _ = this.wrathGetAutoRotation.InvokeFunc();
+                    return true;
+
+                case ExternalAiProvider.BossModReborn:
+                    _ = this.bmrGetAiEnabled.InvokeFunc();
                     return true;
 
                 default:
@@ -89,6 +105,10 @@ public sealed class CombatAiIpc : IDisposable
             case ExternalAiProvider.WrathCombo:
                 this.SetWrath(true);
                 break;
+
+            case ExternalAiProvider.BossModReborn:
+                this.SetBossMod(true);
+                break;
         }
     }
 
@@ -103,6 +123,10 @@ public sealed class CombatAiIpc : IDisposable
 
             case ExternalAiProvider.WrathCombo:
                 this.SetWrath(false);
+                break;
+
+            case ExternalAiProvider.BossModReborn:
+                this.SetBossMod(false);
                 break;
         }
     }
@@ -128,6 +152,27 @@ public sealed class CombatAiIpc : IDisposable
         catch (Exception ex)
         {
             this.log.Debug(ex, "设置 WrathCombo 自动循环失败");
+        }
+    }
+
+    private void SetBossMod(bool enabled)
+    {
+        try
+        {
+            this.bmrSetAiEnabled.InvokeAction(enabled);
+        }
+        catch (Exception ex)
+        {
+            // 通道不在就退回命令方式；BMR 的 /bmr ai on|off 是长期稳定的入口。
+            this.log.Debug(ex, "BossMod Reborn AI IPC 不可用，改用命令");
+            try
+            {
+                this.bmrCommand.InvokeAction(enabled ? "ai on" : "ai off");
+            }
+            catch (Exception inner)
+            {
+                this.log.Debug(inner, "调用 BossMod Reborn 命令失败");
+            }
         }
     }
 

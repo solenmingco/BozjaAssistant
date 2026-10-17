@@ -140,10 +140,94 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Seconds to wait for the warp to complete before giving up.</summary>
     public int AethernetWarpTimeoutSeconds = 20;
 
+    // -------------------------------------------------------- 6 宝箱与胡萝卜
+    /// <summary>启用宝箱 / 胡萝卜采集。</summary>
+    public bool HuntEnabled;
+
+    /// <summary>优先前往对象表里真实存在的宝箱 / 胡萝卜。</summary>
+    public bool HuntPreferLiveObjects = true;
+
+    /// <summary>
+    /// 对象表里没有目标时，是否按候选点巡逻。
+    /// 关掉的话，只在真的看到目标时才动，不会白跑候选点。
+    /// </summary>
+    public bool HuntPatrolCandidates = true;
+
+    /// <summary>巡逻时是否也走宝箱候选点。</summary>
+    public bool HuntPatrolTreasure = true;
+
+    /// <summary>巡逻时是否也走胡萝卜候选点。</summary>
+    public bool HuntPatrolCarrot;
+
+    /// <summary>超过这个距离的目标不考虑。0 = 不限。</summary>
+    public float HuntMaxDistance = 400f;
+
+    // ------------------------------------------------------------ 7 刷怪
+    public bool MobFarmerEnabled;
+
+    /// <summary>拉怪半径。</summary>
+    public float MobFarmerRange = 30f;
+
+    /// <summary>聚够这么多只才开始拉。</summary>
+    public int MobFarmerMinCount = 3;
+
+    /// <summary>进入这个距离就停止移动，开始输出。</summary>
+    public float MobFarmerEngageDistance = 12f;
+
+    /// <summary>只拉不高于玩家这么多级的怪。0 = 不限。</summary>
+    public int MobFarmerMaxLevelDelta = 3;
+
+    /// <summary>拉怪时用飞行坐骑。</summary>
+    public bool MobFarmerFly;
+
+    // -------------------------------------------------------- 8 幻影职业 Buff
+    public bool BuffEnabled;
+
+    public bool BuffEnduringFortitude;
+    public bool BuffFleetfooted;
+    public bool BuffRomeosBallad;
+    public bool BuffQuickerStep;
+
+    /// <summary>剩余时间低于这么多分钟时就续。</summary>
+    public int BuffReapplyThresholdMinutes = 2;
+
+    // ------------------------------------------------------------ 9 两歧塔
+    public bool ForkedTowerEnabled;
+
+    /// <summary>陷阱在这个距离内才记录（米）。</summary>
+    public float ForkedTowerMaxDistance = 80f;
+
+    /// <summary>检测到陷阱时写一条日志。</summary>
+    public bool ForkedTowerAlert = true;
+
+    // ------------------------------------------------------------ 10 统计
+    /// <summary>启用每小时收益统计。</summary>
+    public bool StatsEnabled = true;
+
+    /// <summary>自动返回到营地（离开战斗、无事可做时）。</summary>
+    public bool AutoReturnToCamp;
+
+    /// <summary>返回营地用的传送目的地 PlaceNameId。0 = 用 BaseCamp。</summary>
+    public uint ReturnCampPlaceNameId = 4944;
+
+    // -------------------------------------------------------- 逐活动白名单
+    /// <summary>
+    /// 只前往名字里含这些关键词的 FATE。为空表示全部允许。
+    /// 对应 bozjalone 的逐活动开关，但用关键词而不是硬编码 id —— 国服 id 与国际服不同。
+    /// </summary>
+    public List<string> FateAllowList = new();
+
+    /// <summary>只前往名字里含这些关键词的 CE。为空表示全部允许。</summary>
+    public List<string> CeAllowList = new();
+
+    /// <summary>发现可参加的 CE 后延迟这么多秒再动身（对应 DelayCriticalEncounters）。</summary>
+    public int CeStartDelaySeconds;
+
     // ---------------------------------------------------------------- 统计
     public int TotalFatesCompleted;
     public int TotalCesJoined;
     public int TotalDropsAlerted;
+    public int TotalTreasuresLooted;
 
     /// <summary>Unix seconds of the last completed automation cycle.</summary>
     public long LastRunUnixSeconds;
@@ -178,4 +262,10 @@ public enum ExternalAiProvider
 
     /// <summary>WrathCombo.</summary>
     WrathCombo,
+
+    /// <summary>
+    /// BossMod Reborn —— 严格说它管的是机制处理而不是输出循环，
+    /// 但它的 AI 模块确实会接管走位与技能，因此与 RSR/WrathCombo 并列为可选联动对象。
+    /// </summary>
+    BossModReborn,
 }

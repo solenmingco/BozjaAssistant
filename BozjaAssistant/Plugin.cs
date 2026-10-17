@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using BozjaAssistant.Automation;
 using BozjaAssistant.Data;
@@ -71,6 +73,21 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Mount handling for long-distance travel.</summary>
     public MountModule Mount { get; }
 
+    /// <summary>宝箱 / 胡萝卜采集。</summary>
+    public HuntModule Hunt { get; }
+
+    /// <summary>刷怪（拉怪聚怪）。</summary>
+    public MobFarmerModule MobFarmer { get; }
+
+    /// <summary>幻影职业增益。</summary>
+    public BuffModule Buff { get; }
+
+    /// <summary>两歧塔陷阱标记。</summary>
+    public ForkedTowerModule ForkedTower { get; }
+
+    /// <summary>每小时收益统计。</summary>
+    public StatsModule Stats { get; }
+
     /// <summary>The automation state machine.</summary>
     public AutomationController Automation { get; }
 
@@ -106,6 +123,11 @@ public sealed class Plugin : IDalamudPlugin
             ClientState,
             Log);
         this.Mount = new MountModule(ObjectTable, Condition, this.Activity, Log);
+        this.Hunt = new HuntModule(ObjectTable, Log);
+        this.MobFarmer = new MobFarmerModule(ObjectTable, this.Navmesh, Log);
+        this.Buff = new BuffModule(Log);
+        this.ForkedTower = new ForkedTowerModule(ObjectTable, Log);
+        this.Stats = new StatsModule(Log);
 
         this.Automation = new AutomationController(this);
 
@@ -168,8 +190,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnCommand(string command, string args)
     {
-        var trimmed = args.Trim().ToLowerInvariant();
-        switch (trimmed)
+        var trimmed = args.Trim().ToLowerInvariant();        switch (trimmed)
         {
             case "on":
             case "start":
@@ -207,6 +228,18 @@ public sealed class Plugin : IDalamudPlugin
             case "aether":
             case "aethernet":
                 this.DumpAethernet();
+                break;
+
+            case "hunt":
+                this.DumpHunt();
+                break;
+
+            case "buff":
+                this.DumpBuff();
+                break;
+
+            case "stats":
+                Chat.Print($"[Bozja] {this.Stats.Describe()}");
                 break;
 
             case "":
@@ -278,6 +311,78 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         Chat.Print($"[Bozja] 传送开关：{(this.Configuration.AethernetRouting ? "开" : "关")}；Lifestream：{(this.Lifestream.IsAvailable ? "可用" : "不可用")}");
+    }
+
+    /// <summary>
+    /// Dump the embedded hunt dataset and what of it is currently visible on screen.
+    ///
+    /// The candidate coordinates are static data, but whether a chest/carrot actually
+    /// exists there at this instant can only be answered by the object table. Printing
+    /// both together is what makes "why isn't it going for the chest" answerable.
+    /// </summary>
+    private void DumpHunt()
+    {
+        var store = HuntDataStore.Instance;
+        Chat.Print($"[Bozja] 采集数据：{(store.IsLoaded ? HuntDataStore.Describe() : $"载入失败 - {store.LoadError}")}");
+
+        var player = ObjectTable.LocalPlayer;
+        if (player is null)
+        {
+            Chat.Print("[Bozja] 尚未进入游戏。");
+            return;
+        }
+
+        Chat.Print(
+            $"[Bozja] 候选点：宝箱 {store.TreasureNodes.Count} 个、胡萝卜 {store.CarrotNodes.Count} 个；" +
+            $"已巡查 {this.Hunt.VisitedCount} 个");
+
+        var live = this.Hunt.FindTarget(player.Position, this.Configuration);
+        if (live is null)
+        {
+            Chat.Print("[Bozja] 当前没有可前往的采集目标。");
+        }
+        else
+        {
+            Chat.Print(
+                $"  目标：{live.Name}（{(live.IsLiveObject ? "对象表实际存在" : "候选点巡逻")}，" +
+                $"{(live.Kind == HuntModule.HuntKind.Carrot ? "胡萝卜" : "宝箱")}）距 {live.Distance:F0} 米");
+        }
+
+        var aether = store.Aetherytes;
+        Chat.Print($"[Bozja] 内置以太之光 {aether.Count} 个");
+        foreach (var ae in aether)
+        {
+            Chat.Print($"  {ae.Name} PlaceNameId={ae.PlaceNameId}");
+        }
+    }
+
+    /// <summary>
+    /// Dump the phantom-job buff situation: current job, the action ids we would use,
+    /// and whether each status is already up. The ids came from game sheets, so this
+    /// is also the way to confirm at runtime that they line up with what the game shows.
+    /// </summary>
+    private void DumpBuff()
+    {
+        var currentJob = BuffModule.GetCurrentJob();
+        Chat.Print($"[Bozja] 当前幻影职业：{(currentJob == 0 ? "无（不在新月岛或未持有）" : currentJob.ToString())}");
+        Chat.Print($"[Bozja] 动作阶段：{this.Buff.PhaseText}");
+
+        var player = ObjectTable.LocalPlayer;
+        var statuses = new List<(uint StatusId, float Remaining)>();
+        if (player is Dalamud.Game.ClientState.Objects.Types.IBattleChara bc)
+        {
+            foreach (var s in bc.StatusList)
+            {
+                statuses.Add((s.StatusId, s.RemainingTime));
+            }
+        }
+
+        foreach (var spec in BuffModule.AllSpecs)
+        {
+            var hit = statuses.FirstOrDefault(x => x.StatusId == spec.StatusId);
+            var state = hit.StatusId == 0 ? "未激活" : $"剩余 {hit.Remaining:F0} 秒";
+            Chat.Print($"  {spec.Name}：状态 {spec.StatusId} / 技能 {spec.ActionId} / 职业 {spec.SupportJobId} — {state}");
+        }
     }
 
     /// <summary>

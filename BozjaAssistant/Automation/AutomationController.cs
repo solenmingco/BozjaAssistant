@@ -4,6 +4,7 @@ using System.Numerics;
 using BozjaAssistant.Data;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game.Fate;
+using FFXIVClientStructs.FFXIV.Client.Game.InstanceContent;
 
 namespace BozjaAssistant.Automation;
 
@@ -39,6 +40,7 @@ public sealed class AutomationController : IDisposable
     private DateTime deathTime = DateTime.MinValue;
 
     private TargetSelector.Target currentTarget = TargetSelector.None;
+    private HuntModule.HuntTarget? currentHuntTarget;
     private bool wasDead;
     private bool disposed;
 
@@ -188,10 +190,29 @@ public sealed class AutomationController : IDisposable
         this.plugin.DropAlerts.Tick();
         this.plugin.Mount.Tick();
 
+        // 采集 / 陷阱 / 统计都是被动或节流的，放在这里跑，不参与目标选择。
+        this.plugin.Hunt.MaybeResetDaily();
+        this.plugin.ForkedTower.Tick(playerPosition, this.config);
+        this.SampleStats();
+
+        // 幻影职业 Buff：不参与寻路决策，但可能临时切走职业，
+        // 因此必须在刷怪与战斗之前处理，避免切职业时正在放技能。
+        this.TickBuffs(now, player);
+
         if ((now - this.lastCombatTick).TotalSeconds >= 0.5)
         {
             this.lastCombatTick = now;
             this.plugin.Combat.Tick(playerPosition);
+        }
+
+        // 刷怪模块独立于 FATE / CE：它在自己拉怪时接管移动，
+        // 返回 true 表示本 tick 不应再下发 FATE/CE 的寻路指令。
+        var farming = this.plugin.MobFarmer.Tick(playerPosition, player.Level, this.config);
+        if (farming)
+        {
+            this.StatusText = $"刷怪：{this.plugin.MobFarmer.StateText}";
+            this.plugin.UpdateDtr($"Bozja: 刷怪 {this.plugin.MobFarmer.StateText}");
+            return;
         }
 
         this.UpdateTravel(now, zone, playerPosition);
@@ -283,7 +304,133 @@ public sealed class AutomationController : IDisposable
             }
         }
 
+        // 没有 FATE / CE 可打时，才去看宝箱与胡萝卜。
+        // 放在最后是有意的：采集的收益远低于战斗内容，不该抢在前面。
+        if (this.config.HuntEnabled)
+        {
+            var hunt = this.plugin.Hunt.FindTarget(playerPosition, this.config);
+            if (hunt is not null)
+            {
+                // Kind 仍记为 Fate —— TargetKind 描述的是「走哪条路去」，
+                // 采集点与 FATE 一样是「走过去、到了就停」，没有专属形态。
+                // 名称前缀让它在本控制器里可以与其他 FATE 区分开。
+                this.SetTarget(new TargetSelector.Target(
+                    TargetSelector.TargetKind.Fate,
+                    hunt.Name,
+                    hunt.Position,
+                    hunt.Distance,
+                    $"{(hunt.IsLiveObject ? "发现" : "巡逻")}采集点（{hunt.Distance:F0} 米）"));
+                this.currentHuntTarget = hunt;
+                return;
+            }
+        }
+
+        this.currentHuntTarget = null;
         this.currentTarget = TargetSelector.None;
+    }
+
+    /// <summary>
+    /// 施放幻影职业增益。整套动作是「切职业 → 放技能 → 切回」，
+    /// 分三个 tick 完成，因为职业切换要等游戏认了才放得出技能。
+    /// </summary>
+    private void TickBuffs(DateTime now, Dalamud.Game.ClientState.Objects.Types.IGameObject player)
+    {
+        if (!this.config.BuffEnabled || this.config.EmergencyStop)
+        {
+            this.plugin.Buff.Reset();
+            return;
+        }
+
+        try
+        {
+            var currentJob = BuffModule.GetCurrentJob();
+            if (currentJob == 0)
+            {
+                // 不在新月岛或没持有幻影职业，什么都不做。
+                return;
+            }
+
+            // StatusList 在 IBattleChara 上，IGameObject 没有这个成员。
+            if (player is not Dalamud.Game.ClientState.Objects.Types.IBattleChara battleChara)
+                return;
+
+            var statuses = new List<(uint StatusId, float RemainingSeconds)>();
+            foreach (var s in battleChara.StatusList)
+            {
+                statuses.Add((s.StatusId, s.RemainingTime));
+            }
+
+            // 分三段推进：切职业 → 放技能 → 切回。每段跨 tick，
+            // 因为职业切换后游戏要一拍才认。
+            switch (this.plugin.Buff.Phase)
+            {
+                case BuffModule.ApplyStage.SwitchedToBuffJob:
+                case BuffModule.ApplyStage.Casting:
+                    if (this.plugin.Buff.IsReadyToCast)
+                    {
+                        // 技能由外部循环插件负责按，插件本身不施放技能；
+                        // 这里只是等一个短窗口让循环插件在正确职业下发招，
+                        // 随后就切回原职业，避免长时间占着增益职业。
+                        this.plugin.Buff.FinishCast();
+                    }
+
+                    return;
+
+                case BuffModule.ApplyStage.RestoringOriginal:
+                    this.plugin.Buff.EndApply();
+                    return;
+            }
+
+            var due = this.plugin.Buff.PickDueBuff(this.config, statuses, currentJob);
+            if (due is null)
+            {
+                return;
+            }
+
+            if (this.plugin.Buff.BeginApply(due, currentJob))
+            {
+                this.activity.Add($"施放增益 {due.Name}（幻影职业 {due.SupportJobId}）");
+            }
+        }
+        catch (Exception ex)
+        {
+            this.plugin.Buff.Reset();
+            this.log.Debug(ex, "[Buff] 处理增益时出错");
+        }
+    }
+
+    /// <summary>
+    /// 记录收益采样，供每小时统计使用。
+    ///
+    /// 新月岛的真实产出口径是 OccultCrescentState 里的银币 / 金币 / 知识值，
+    /// 而不是角色的经验条 —— Dalamud 15 的 IPlayerCharacter 根本没有暴露经验字段。
+    /// 读内容状态既准确又和这片地的实际收益对得上。
+    /// </summary>
+    private unsafe void SampleStats()
+    {
+        if (!this.config.StatsEnabled || !this.plugin.Stats.ShouldSample())
+        {
+            return;
+        }
+
+        try
+        {
+            var state = PublicContentOccultCrescent.GetState();
+            if (state is null)
+            {
+                return;
+            }
+
+            this.plugin.Stats.Record(
+                exp: state->CurrentKnowledge,
+                silver: state->Silver,
+                gold: state->Gold,
+                cluster: state->NeededJobExperience);
+        }
+        catch (Exception ex)
+        {
+            this.log.Debug(ex, "[Stats] 采样失败");
+        }
     }
 
     private void SetTarget(TargetSelector.Target target)

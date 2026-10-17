@@ -56,8 +56,122 @@ public sealed class ConfigWindow : Window, IDisposable
         this.Section("FATE 模块", FontAwesomeIcon.Map, this.DrawFateSection);
         this.Section("紧急遭遇战（CE）模块", FontAwesomeIcon.Crosshairs, this.DrawCeSection);
         this.Section("自动战斗", FontAwesomeIcon.Khanda, this.DrawCombatSection);
+        this.Section("宝箱与胡萝卜", FontAwesomeIcon.BoxOpen, this.DrawHuntSection);
+        this.Section("刷怪", FontAwesomeIcon.Skull, this.DrawMobFarmerSection);
+        this.Section("幻影职业 Buff", FontAwesomeIcon.Magic, this.DrawBuffSection);
+        this.Section("两歧塔陷阱", FontAwesomeIcon.ExclamationTriangle, this.DrawForkedTowerSection);
         this.Section("通用自动化", FontAwesomeIcon.Robot, this.DrawGeneralSection);
+        this.Section("收益统计", FontAwesomeIcon.ChartLine, this.DrawStatsSection);
         this.Section("紧急停止与统计", FontAwesomeIcon.Ban, this.DrawMiscSection);
+    }
+
+    private void DrawHuntSection()
+    {
+        this.SaveOnChange(() => ImGui.Checkbox("启用宝箱 / 胡萝卜采集", ref this.config.HuntEnabled));
+
+        if (!this.config.HuntEnabled)
+        {
+            return;
+        }
+
+        ImGui.TextDisabled(HuntDataStore.Describe());
+
+        this.SaveOnChange(() => ImGui.Checkbox("优先前往实际存在的目标", ref this.config.HuntPreferLiveObjects));
+        this.SaveOnChange(() => ImGui.Checkbox("没有目标时按候选点巡逻", ref this.config.HuntPatrolCandidates));
+
+        if (this.config.HuntPatrolCandidates)
+        {
+            using var indent = ImRaii.PushIndent(1, true);
+            this.SaveOnChange(() => ImGui.Checkbox("巡逻宝箱候选点", ref this.config.HuntPatrolTreasure));
+            this.SaveOnChange(() => ImGui.Checkbox("巡逻胡萝卜候选点", ref this.config.HuntPatrolCarrot));
+        }
+
+        ImGui.SetNextItemWidth(200);
+        this.SaveOnChange(() => ImGui.DragFloat("最大距离（米，0=不限）", ref this.config.HuntMaxDistance, 10f, 0f, 2000f));
+    }
+
+    private void DrawMobFarmerSection()
+    {
+        this.SaveOnChange(() => ImGui.Checkbox("启用刷怪", ref this.config.MobFarmerEnabled));
+
+        if (!this.config.MobFarmerEnabled)
+        {
+            return;
+        }
+
+        ImGui.SetNextItemWidth(200);
+        this.SaveOnChange(() => ImGui.DragFloat("拉怪半径（米）", ref this.config.MobFarmerRange, 1f, 5f, 100f));
+
+        ImGui.SetNextItemWidth(200);
+        this.SaveOnChange(() => ImGui.DragInt("聚够几只才开拉", ref this.config.MobFarmerMinCount, 1f, 1, 20));
+
+        ImGui.SetNextItemWidth(200);
+        this.SaveOnChange(() => ImGui.DragFloat("进入战斗距离（米）", ref this.config.MobFarmerEngageDistance, 1f, 1f, 40f));
+
+        ImGui.SetNextItemWidth(200);
+        this.SaveOnChange(() => ImGui.DragInt("只拉不高于自身几级（0=不限）", ref this.config.MobFarmerMaxLevelDelta, 1f, 0, 20));
+
+        this.SaveOnChange(() => ImGui.Checkbox("拉怪时使用飞行坐骑", ref this.config.MobFarmerFly));
+
+        ImGui.Spacing();
+        ImGui.TextDisabled($"当前状态：{this.plugin.MobFarmer.StateText}");
+    }
+
+    private void DrawBuffSection()
+    {
+        this.SaveOnChange(() => ImGui.Checkbox("启用幻影职业 Buff", ref this.config.BuffEnabled));
+
+        if (!this.config.BuffEnabled)
+        {
+            return;
+        }
+
+        ImGui.TextDisabled("切到对应幻影职业→放增益→切回原职业。仅在新月岛有效。");
+
+        this.SaveOnChange(() => ImGui.Checkbox("不屈之躯（幻影骑士）", ref this.config.BuffEnduringFortitude));
+        this.SaveOnChange(() => ImGui.Checkbox("迅足（幻影武僧）", ref this.config.BuffFleetfooted));
+        this.SaveOnChange(() => ImGui.Checkbox("罗密欧的歌谣（幻影诗人）", ref this.config.BuffRomeosBallad));
+        this.SaveOnChange(() => ImGui.Checkbox("轻快舞步（幻影舞者）", ref this.config.BuffQuickerStep));
+
+        ImGui.SetNextItemWidth(200);
+        this.SaveOnChange(() => ImGui.DragInt("剩余低于几分钟就续", ref this.config.BuffReapplyThresholdMinutes, 0.2f, 1, 15));
+    }
+
+    private void DrawForkedTowerSection()
+    {
+        this.SaveOnChange(() => ImGui.Checkbox("启用两歧塔陷阱检测", ref this.config.ForkedTowerEnabled));
+
+        if (!this.config.ForkedTowerEnabled)
+        {
+            return;
+        }
+
+        ImGui.TextDisabled("运行时扫描，不是服务器共享数据。开陷阱探测命中率更高。");
+
+        ImGui.SetNextItemWidth(200);
+        this.SaveOnChange(() => ImGui.DragFloat("检测距离（米）", ref this.config.ForkedTowerMaxDistance, 5f, 10f, 300f));
+
+        this.SaveOnChange(() => ImGui.Checkbox("检测到陷阱时记日志", ref this.config.ForkedTowerAlert));
+
+        ImGui.Spacing();
+        ImGui.TextDisabled($"当前已标记 {this.plugin.ForkedTower.Markers.Count} 个陷阱");
+    }
+
+    private void DrawStatsSection()
+    {
+        this.SaveOnChange(() => ImGui.Checkbox("启用收益统计", ref this.config.StatsEnabled));
+
+        if (!this.config.StatsEnabled)
+        {
+            return;
+        }
+
+        ImGui.TextDisabled(this.plugin.Stats.Describe());
+
+        if (ImGui.Button("重置统计"))
+        {
+            this.plugin.Stats.Reset();
+        }
     }
 
     private void Section(string label, FontAwesomeIcon icon, Action draw)
