@@ -76,7 +76,7 @@
 ### 通过自定义仓库源
 
 1. 游戏内 `/xlplugins` → **Settings** → **Experimental** → **Custom Plugin Repositories**
-2. 填入（二选一，都实测实时）：
+2. 填入（任选其一）：
 
    ```
    https://ghfast.top/https://raw.githubusercontent.com/solenmingco/BozjaAssistant/main/pluginmaster.json
@@ -86,22 +86,34 @@
    https://ghproxy.net/https://raw.githubusercontent.com/solenmingco/BozjaAssistant/main/pluginmaster.json
    ```
 
-   > **为什么不用其它地址**（2026-02 实测，同一次发布后逐一看返回的版本号）
+   ```
+   https://gh-proxy.com/https://raw.githubusercontent.com/solenmingco/BozjaAssistant/main/pluginmaster.json
+   ```
+
+   > **关于「发布后仍显示无需更新」**
    >
-   > | 地址 | 发布后返回 |
-   > |---|---|
-   > | `ghfast.top` / `ghproxy.net` | 新版本 ✅ |
-   > | `raw.githubusercontent.com` 直连 | 新版本 ✅，但国内多数网络**解析不到这个域名** |
-   > | `cdn.jsdelivr.net/...@main/...` | 能拉到，但对**分支引用**缓存最长 7 天，会出现「已发布却一直显示无需更新」 |
-   > | `gh-proxy.com` | ❌ **仍返回上一个版本**，过期后依然如此，实际会卡住更新检测 |
+   > 这不是某一个镜像的问题。实测 GitHub 自己更新 `raw.githubusercontent.com` 上的文件就有约
+   > **1 分钟**延迟，各镜像在此之上还有自己的缓存，所以发布后短时间内看到旧版本是正常的。
    >
-   > 早先推荐过 `gh-proxy.com`，那是只测了可用性没测新鲜度，已纠正。
+   > 实测一次发布后逐次轮询（发布的是一次只改文档的版本）：
+   >
+   > | 地址 | 0s | 20s | 40s | 60s | 80s | 100s | 120s |
+   > | --- | --- | --- | --- | --- | --- | --- | --- |
+   > | GitHub 直连 | 旧 | 旧 | 旧 | 旧 | 新 | 新 | 新 |
+   > | `ghfast.top` | 新 | 新 | 新 | 旧 | 新 | 新 | 新 |
+   > | `gh-proxy.com` | 新 | 新 | 新 | 新 | 新 | 新 | 新 |
+   > | `ghproxy.net` | 旧 | 旧 | 旧 | 旧 | 旧 | 旧 | 旧 |
+   >
+   > 结论：**发布后等 1~2 分钟再 Scan for updates**。国内网络下 `ghfast.top` 或
+   > `gh-proxy.com` 都是可用选择；`ghproxy.net` 在这台机器上追新版最慢。
+   >
+   > 不要用 `cdn.jsdelivr.net/...@main/...`：它对**分支引用**缓存最长 7 天，
+   > 会出现「已发布却持续几天显示无需更新」。
 
 3. 保存后回到插件列表，搜索 **Bozja** 安装即可。
 
-> 若刚发布完就查、却看到旧版本：先等 1 分钟再 **Scan for updates**。
-> 确认清单里到底是哪个版本，可以在浏览器打开你填的那个源地址直接看
-> `AssemblyVersion` 字段——这比在游戏里反复点刷新快得多。
+> 怀疑缓存时，最快的确诊方式是在浏览器直接打开你填的那个源地址，看
+> `AssemblyVersion` 字段是多少——比在游戏里反复点刷新快得多。
 
 ### 手动安装
 

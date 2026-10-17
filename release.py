@@ -234,37 +234,54 @@ def main():
     # .NET/Schannel stack in this environment fails with SEC_E_NO_CREDENTIALS,
     # which silently yields empty content and made this check crash.
     #
-    # This check must go through a mirror that does NOT cache, otherwise it
-    # reports the previous release as a failure. gh-proxy.com was measured
-    # serving a stale copy well past its advertised max-age=60, so the check
-    # uses ghfast.top and falls back to fetching straight from GitHub.
+    # This has to POLL rather than check once. Measured on this machine: GitHub
+    # itself takes ~80 seconds before raw.githubusercontent.com serves the newly
+    # pushed commit, and every mirror adds its own cache on top of that. A single
+    # immediate read therefore reports the previous release and looks like a
+    # failed push when nothing is wrong.
     master_urls = [
         "https://ghfast.top/https://raw.githubusercontent.com/"
         "solenmingco/BozjaAssistant/main/pluginmaster.json",
-        "https://raw.githubusercontent.com/"
+        "https://gh-proxy.com/https://raw.githubusercontent.com/"
         "solenmingco/BozjaAssistant/main/pluginmaster.json",
     ]
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler(
+        {"http": PROXY_URL, "https": PROXY_URL}))
+
+    def read_advertised(url, bust):
+        target = url if not bust else f"{url}?_={int(__import__('time').time() * 1000)}"
+        r = urllib.request.Request(
+            target, headers={"User-Agent": "Dalamud", "Cache-Control": "no-cache"})
+        with opener.open(r, timeout=45) as resp:
+            return json.loads(resp.read().decode("utf-8"))[0]["AssemblyVersion"]
+
+    import time
+
     advertised = None
-    for url in master_urls:
-        try:
-            r = urllib.request.Request(
-                url, headers={"User-Agent": "Dalamud", "Cache-Control": "no-cache"})
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler(
-                {"http": PROXY_URL, "https": PROXY_URL}))
-            with opener.open(r, timeout=60) as resp:
-                advertised = json.loads(resp.read().decode("utf-8"))[0]["AssemblyVersion"]
-            print(f"   master advertises {advertised} via {url.split('/')[2]}")
+    deadline = time.time() + 180
+    attempt = 0
+    while time.time() < deadline:
+        attempt += 1
+        for url in master_urls:
+            host = url.split("/")[2]
+            try:
+                got = read_advertised(url, bust=True)
+            except Exception as e:  # noqa: BLE001
+                print(f"   attempt {attempt} {host}: {type(e).__name__}")
+                continue
+            if got == args.version:
+                advertised = got
+                print(f"   attempt {attempt} {host}: {got} (matches)")
+                break
+            print(f"   attempt {attempt} {host}: {got} (still propagating)")
+        if advertised is not None:
             break
-        except Exception as e:  # noqa: BLE001
-            print(f"   {url.split('/')[2]} check failed: {type(e).__name__}: {e}")
+        time.sleep(15)
 
     if advertised is None:
-        print("   !! could not read pluginmaster.json from any mirror")
-    elif advertised != args.version:
-        print(f"   !! master advertises {advertised}, expected {args.version}")
-        raise SystemExit("pluginmaster.json on main does not advertise the new version")
-    else:
-        print(f"   versions agree: {advertised}")
+        print("   !! gave up waiting for the manifest to advertise the new version")
+        print("   The push and the release succeeded; only the mirror has not caught up.")
+        raise SystemExit(1)
 
     print(f"   release latest = {latest.get('tag_name')}")
     print()
